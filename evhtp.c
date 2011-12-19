@@ -1468,11 +1468,6 @@ _evhtp_ssl_get_scache_ent(evhtp_ssl_t * ssl, unsigned char * sid, int sid_len, i
  * PUBLIC FUNCTIONS
  */
 
-htp_method
-evhtp_request_get_method(evhtp_request_t * r) {
-    return htparser_get_method(r->conn->parser);
-}
-
 /**
  * @brief pauses a connection (disables reading)
  *
@@ -2480,6 +2475,16 @@ evhtp_ssl_init(evhtp_t * htp, evhtp_ssl_cfg_t * cfg) {
 
 #endif
 
+int
+evhtp_request_set_hook(evhtp_request_t * r, evhtp_hook_type type, void * cb, void * arg) {
+    return evhtp_set_hook(&r->hooks, type, cb, arg);
+}
+
+int
+evhtp_connection_set_hook(evhtp_connection_t * c, evhtp_hook_type type, void * cb, void * arg) {
+    return evhtp_set_hook(&c->hooks, type, cb, arg);
+}
+
 evbev_t *
 evhtp_connection_get_bev(evhtp_connection_t * connection) {
     return connection->bev;
@@ -2503,6 +2508,151 @@ evhtp_request_set_bev(evhtp_request_t * request, evbev_t * bev) {
 evhtp_connection_t *
 evhtp_request_get_connection(evhtp_request_t * request) {
     return request->conn;
+}
+
+evhtp_t *
+evhtp_request_get_htp(evhtp_request_t * r) {
+    return r->htp;
+}
+
+evbuf_t *
+evhtp_request_get_input(evhtp_request_t * r) {
+    return r->buffer_in;
+}
+
+evbuf_t *
+evhtp_request_get_output(evhtp_request_t * r) {
+    return r->buffer_out;
+}
+
+evhtp_uri_t *
+evhtp_request_get_uri(evhtp_request_t * r) {
+    return r->uri;
+}
+
+evhtp_headers_t *
+evhtp_request_get_input_headers(evhtp_request_t * r) {
+    return r->headers_in;
+}
+
+evhtp_headers_t *
+evhtp_request_get_output_headers(evhtp_request_t * r) {
+    return r->headers_out;
+}
+
+evhtp_proto
+evhtp_request_get_proto(evhtp_request_t * r) {
+    return r->proto;
+}
+
+htp_method
+evhtp_request_get_method(evhtp_request_t * r) {
+    return htparser_get_method(r->conn->parser);
+}
+
+struct sockaddr *
+evhtp_connection_get_sockaddr(evhtp_connection_t * c) {
+    return c->saddr;
+}
+
+int
+evhtp_connection_get_fd(evhtp_connection_t * c) {
+    return c->sock;
+}
+
+void
+evhtp_request_set_cbarg(evhtp_request_t * r, void * arg) {
+    r->cbarg = arg;
+}
+
+void
+evhtp_request_set_cb(evhtp_request_t * r, evhtp_callback_cb cb) {
+    r->cb = cb;
+}
+
+evhtp_uri_t *
+evhtp_request_get_uri(evhtp_request_t * r) {
+    return r->uri;
+}
+
+evhtp_authority_t *
+evhtp_uri_get_authority(evhtp_uri_t * u) {
+    return u->authority;
+}
+
+evhtp_path_t *
+evhtp_uri_get_path(evhtp_uri_t * u) {
+    return u->path;
+}
+
+unsigned char *
+evhtp_uri_get_fragment(evhtp_uri_t * u) {
+    return u->fragment;
+}
+
+unsigned char *
+evhtp_uri_get_query_raw(evhtp_uri_t * u) {
+    return u->query;
+}
+
+htp_scheme
+evhtp_uri_get_scheme(evhtp_uri_t * u) {
+    return u->scheme;
+}
+
+char *
+evhtp_authority_get_username(evhtp_authority_t * a) {
+    return a->username;
+}
+
+char *
+evhtp_authority_get_password(evhtp_authority_t * a) {
+    return a->password;
+}
+
+char *
+evhtp_authority_get_hostname(evhtp_authority_t * a) {
+    return a->hostname;
+}
+
+uint16_t
+evhtp_authority_get_port(evhtp_authority_t * a) {
+    return a->port;
+}
+
+char *
+evhtp_path_get_full(evhtp_path_t * p) {
+    return p->full;
+}
+
+char *
+evhtp_path_get_path(evhtp_path_t * p) {
+    return p;
+}
+
+char *
+evhtp_path_get_file(evhtp_path_t * p) {
+    return p->file;
+}
+
+char *
+evhtp_path_get_match_start(evhtp_path_t * p) {
+    return p->match_start;
+}
+
+char *
+evhtp_path_get_match_end(evhtp_path_t * p) {
+    return p->match_end;
+}
+
+unsigned int
+evhtp_path_get_matched_soff(evhtp_path_t * p) {
+    return p->matched_soff;
+}
+
+unsigned int
+evhtp_path_get_matched_eoff(evhtp_path_t * p) {
+    return p->matched_eoff;
 }
 
 void
