@@ -88,3 +88,74 @@ evhttp_send_reply_end(struct evhttp_request * req) {
     return evhtp_send_reply_end(req);
 }
 
+/*
+ * TODO evhttp_request_new, it exists but not exported
+ * TODO: evhttp_request_set_chunked_cb, will have to create an on_chunk_read hook
+ * TODO: evhttp_request_free, it exists but not exported
+ */
+
+struct bufferevent *
+evhttp_connection_get_bufferevent(struct evhttp_connection * evconn) {
+    return evhtp_connection_get_bev(evconn);
+}
+
+/* TODO evhtp_request_own(), must create function like take_ownership() but
+ * without freeing underlying structures */
+
+int
+evhttp_request_is_owned(struct evhttp_request * req) {
+    return (int)req->owner;
+}
+
+struct evhttp_connection *
+evhttp_request_get_connection(struct evhttp_request * req) {
+    return evhtp_request_get_connection(req);
+}
+
+struct event_base *
+evhttp_connection_get_base(struct evhttp_connection * conn) {
+    return conn->evbase;
+}
+
+void
+evhttp_connection_free(struct evhttp_connection * evcon) {
+    return evhtp_connection_free(evcon);
+}
+
+/*
+ * TODO set_local_address
+ * TODO set_local_port
+ */
+
+void
+evhttp_connection_set_timeout(struct evhttp_connection * evconn, int timeout_in_secs) {
+    struct tv tv;
+
+    tv.tv_sec  = timeout_in_secs;
+    tv.tv_usec = 0;
+
+    return evhtp_connection_set_timeouts(evconn, &tv, NULL);
+}
+
+/*
+ * TODO connection_set_retries
+ * TODO connection_set_closecb (should use on_error hook
+ * TODO connection_get_peer
+ * TODO make_request
+ * TODO cancel_request
+ */
+const char *
+evhttp_request_get_uri(const struct evhttp_request * req) {
+    if (!req->uri) {
+        return NULL;
+    }
+
+    return req->uri->query_raw;
+}
+
+const
+evhttp_uri *
+evhttp_request_get_evhttp_uri(struct evhttp_request * req) {
+    return req->uri;
+}
+
