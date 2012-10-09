@@ -9,6 +9,9 @@
 
 #include "htparse.h"
 
+/* Consistently allow LF only where CRLF is required. */
+#define ALLOW_LF_ONLY 1
+
 #ifdef PARSER_DEBUG
 #define __QUOTE(x)                  # x
 #define  _QUOTE(x)                  __QUOTE(x)
@@ -1233,9 +1236,13 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                         p->state = s_almost_done;
                         break;
                     case LF:
+#ifdef ALLOW_LF_ONLY
+                        goto s_almost_done;
+#else
                         /* LF without a CR? error.... */
                         p->error = htparse_error_inval_reqline;
                         return i + 1;
+#endif
                     default:
                         if (ch < '0' || ch > '9') {
                             p->error = htparse_error_inval_ver;
@@ -1311,6 +1318,9 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                 }
                 break;
 
+#ifdef ALLOW_LF_ONLY
+s_almost_done:
+#endif
             case s_almost_done:
                 switch (ch) {
                     case LF:
@@ -1339,7 +1349,13 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                         p->state = s_hdrline_almost_done;
                         break;
                     case LF:
+#ifdef ALLOW_LF_ONLY
+                        goto hdrline_almost_done;
+#else
+                        p->error = htparse_error_inval_hdr;
                         return i + 1;
+#endif
+                        break;
                     default:
                         goto hdrline_start;
                 }
@@ -1474,6 +1490,9 @@ hdrline_start:
 
                 switch (ch) {
                     case CR:
+#ifdef ALLOW_LF_ONLY
+                    case LF:
+#endif
                         switch (p->heval) {
                             case eval_hdr_val_none:
                                 break;
@@ -1525,11 +1544,18 @@ hdrline_start:
                         } /* switch */
 
                         p->state             = s_hdrline_hdr_almost_done;
+#ifdef ALLOW_LF_ONLY
+                        if (ch == LF) {
+                            goto s_hdrline_hdr_almost_done;
+                        }
+#endif
                         break;
+#ifndef ALLOW_LF_ONLY
                     case LF:
                         /* LF before CR? invalid */
                         p->error             = htparse_error_inval_hdr;
                         return i + 1;
+#endif
                     default:
                         p->buf[p->buf_idx++] = ch;
                         p->buf[p->buf_idx]   = '\0';
@@ -1542,6 +1568,9 @@ hdrline_start:
                 }
 
                 break;
+#ifdef ALLOW_LF_ONLY
+s_hdrline_hdr_almost_done:
+#endif
             case s_hdrline_hdr_almost_done:
                 htparse_log_debug("[%p] s_hdrline_hdr_almost_done", p);
 
@@ -1589,10 +1618,19 @@ hdrline_start:
 
                         break;
                     case LF:
-                        /* got LFLF? is this valid? */
+#ifdef ALLOW_LF_ONLY
+                        res = hook_on_hdrs_complete_run(p, hooks);
+                        if (res) {
+                            p->error = htparse_error_user;
+                            return i + 1;
+                        }
+                        goto hdrline_almost_done;
+#else
                         p->error = htparse_error_inval_hdr;
 
                         return i + 1;
+#endif
+                        break;
                     case '\t':
                         /* this is a multiline header value, we must go back to
                          * reading as a header value */
@@ -1614,6 +1652,9 @@ hdrline_start:
                         break;
                 } /* switch */
                 break;
+#ifdef ALLOW_LF_ONLY
+hdrline_almost_done:
+#endif
             case s_hdrline_almost_done:
                 htparse_log_debug("[%p] s_hdrline_almost_done", p);
 
