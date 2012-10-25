@@ -187,7 +187,9 @@ static const char * method_strmap[] = {
     "PROPATCH",
     "LOCK",
     "UNLOCK",
-    "TRACE"
+    "TRACE",
+    "CONNECT",
+    "PATCH",
 };
 
 #define _MIN_READ(a, b) ((a) < (b) ? (a) : (b))
@@ -566,6 +568,11 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                                 p->method = htp_method_TRACE;
                                 break;
                             }
+
+                            if (_str5cmp(m, 'P', 'A', 'T', 'C', 'H')) {
+                                p->method = htp_method_PATCH;
+                                break;
+                            }
                             break;
                         case 6:
                             if (_str6cmp(m, 'D', 'E', 'L', 'E', 'T', 'E')) {
@@ -583,6 +590,9 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                                 p->method = htp_method_OPTIONS;
                             }
 
+                            if (_str7_cmp(m, 'C', 'O', 'N', 'N', 'E', 'C', 'T', '\0')) {
+                                p->method = htp_method_CONNECT;
+                            }
                             break;
                         case 8:
                             if (_str8cmp(m, 'P', 'R', 'O', 'P', 'F', 'I', 'N', 'D')) {
