@@ -452,7 +452,7 @@ htparser_init(htparser * p, htp_type type) {
 void
 htparser_allow_lf_only(htparser * p) {
     if (p) {
-        p->allow_lf_only = 0;
+        p->allow_lf_only = 1;
     }
 }
 
@@ -1494,7 +1494,7 @@ hdrline_start:
                 err = 0;
                 res = 0;
 
-                if (ch == LF && p->allow_lf_only) {
+                if (ch == LF && !p->allow_lf_only) {
                     /* strict is on and the line MUST be CR LF, not LF */
                     p->error = htparse_error_inval_hdr;
                     return i + 1;
