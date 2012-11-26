@@ -9,9 +9,6 @@
 
 #include "htparse.h"
 
-/* Consistently allow LF only where CRLF is required. */
-#define ALLOW_LF_ONLY 1
-
 #ifdef PARSER_DEBUG
 #define __QUOTE(x)                  # x
 #define  _QUOTE(x)                  __QUOTE(x)
@@ -66,7 +63,7 @@ enum parser_state {
     s_schema_slash_slash,
     s_host,
     s_host_ipv6,
-    s_host_ipv6_done,
+    s_host_done,
     s_port,
     s_after_slash_in_uri,
     s_check_uri,
@@ -118,6 +115,7 @@ struct htparser {
     htp_scheme scheme;
     htp_method method;
 
+    char          allow_lf_only;
     unsigned char multipart;
     unsigned char major;
     unsigned char minor;
@@ -137,7 +135,7 @@ struct htparser {
 
     unsigned int buf_idx;
     /* Must be last! */
-    char         buf[PARSER_STACK_MAX];
+    char buf[PARSER_STACK_MAX];
 };
 
 static uint32_t     usual[] = {
@@ -444,9 +442,18 @@ void
 htparser_init(htparser * p, htp_type type) {
     /* Do not memset entire string buffer. */
     memset(p, 0, offsetof(htparser, buf));
-    p->buf[0] = '\0';
-    p->error = htparse_error_none;
-    p->type  = type;
+
+    p->state         = s_start;
+    p->error         = htparse_error_none;
+    p->type          = type;
+    p->allow_lf_only = 0;
+}
+
+void
+htparser_allow_lf_only(htparser * p) {
+    if (p) {
+        p->allow_lf_only = 0;
+    }
 }
 
 htparser *
@@ -707,21 +714,16 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                                 break;
                         } /* switch */
 
-                        res                  = hook_scheme_run(p, hooks, p->scheme_offset,(&p->buf[p->buf_idx] - p->scheme_offset));
-
-#if 0
-                        p->buf_idx           = 0;
-                        p->buf[0]            = '\0';
-#endif
-                        p->buf[p->buf_idx++] = ch;
-                        p->buf[p->buf_idx]   = '\0';
-
-                        p->state             = s_schema_slash;
+                        res = hook_scheme_run(p, hooks, p->scheme_offset, (&p->buf[p->buf_idx] - p->scheme_offset));
 
                         if (res) {
                             p->error = htparse_error_user;
                             return i + 1;
                         }
+
+                        p->buf[p->buf_idx++] = ch;
+                        p->buf[p->buf_idx]   = '\0';
+                        p->state = s_schema_slash;
 
                         break;
                     default:
@@ -771,6 +773,7 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                     p->state = s_host_ipv6;
                     break;
                 }
+
                 c = (unsigned char)(ch | 0x20);
 
                 if (c >= 'a' && c <= 'z') {
@@ -786,14 +789,20 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                 }
 
                 res = hook_host_run(p, hooks, p->host_offset, (&p->buf[p->buf_idx] - p->host_offset));
+
                 if (res) {
                     p->error = htparse_error_user;
                     return i + 1;
                 }
 
-                /* No break here! Fall through. */
-            case s_host_ipv6_done:
-                res = 0;
+                p->state = s_host_done;
+
+            /* successfully parsed a NON-IPV6 hostname, knowing this, the
+             * current character in 'ch' is actually the next state, so we
+             * we fall through to avoid another loop.
+             */
+            case s_host_done:
+                res      = 0;
 
                 switch (ch) {
                     case ':':
@@ -856,7 +865,7 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                         }
                         p->buf[p->buf_idx++] = ch;
                         p->buf[p->buf_idx]   = '\0';
-                        p->state = s_host_ipv6_done;
+                        p->state = s_host_done;
                         break;
                     default:
                         p->error = htparse_error_inval_schema;
@@ -895,12 +904,12 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                         p->buf[p->buf_idx]   = '\0';
                         p->path_offset       = &p->buf[p->buf_idx - 1];
 
-                        p->state   = s_after_slash_in_uri;
+                        p->state = s_after_slash_in_uri;
                         break;
                     default:
-                        p->error   = htparse_error_inval_reqline;
+                        p->error = htparse_error_inval_reqline;
                         return i + 1;
-                }
+                } /* switch */
 
                 if (res) {
                     p->error = htparse_error_user;
@@ -1085,21 +1094,21 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                     }
                     break;
                     case CR:
-                        p->minor             = 9;
-                        p->buf_idx           = 0;
-                        p->state             = s_almost_done;
+                        p->minor   = 9;
+                        p->buf_idx = 0;
+                        p->state   = s_almost_done;
                         break;
                     case LF:
-                        p->minor             = 9;
-                        p->buf_idx           = 0;
-                        p->state             = s_hdrline_start;
+                        p->minor   = 9;
+                        p->buf_idx = 0;
+                        p->state   = s_hdrline_start;
                         break;
                     case '?':
                         /* RFC 3986 section 3.4:
-                           The query component is indicated by the
-                           first question mark ("?") character and
-                           terminated by a number sign ("#") character
-                           or by the end of the URI. */
+                         * The query component is indicated by the
+                         * first question mark ("?") character and
+                         * terminated by a number sign ("#") character
+                         * or by the end of the URI. */
                         if (!p->args_offset) {
                             res = hook_path_run(p, hooks, p->path_offset,
                                                 (&p->buf[p->buf_idx] - p->path_offset));
@@ -1109,7 +1118,7 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                             p->args_offset       = &p->buf[p->buf_idx];
                             break;
                         }
-                        /* Fall through. */
+                    /* Fall through. */
                     default:
                         p->buf[p->buf_idx++] = ch;
                         p->buf[p->buf_idx]   = '\0';
@@ -1236,13 +1245,13 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                         p->state = s_almost_done;
                         break;
                     case LF:
-#ifdef ALLOW_LF_ONLY
-                        goto s_almost_done;
-#else
+                        if (p->allow_lf_only) {
+                            goto s_almost_done;
+                        }
+
                         /* LF without a CR? error.... */
                         p->error = htparse_error_inval_reqline;
                         return i + 1;
-#endif
                     default:
                         if (ch < '0' || ch > '9') {
                             p->error = htparse_error_inval_ver;
@@ -1318,9 +1327,7 @@ htparser_run(htparser * p, htparse_hooks * hooks, const char * data, size_t len)
                 }
                 break;
 
-#ifdef ALLOW_LF_ONLY
 s_almost_done:
-#endif
             case s_almost_done:
                 switch (ch) {
                     case LF:
@@ -1349,13 +1356,12 @@ s_almost_done:
                         p->state = s_hdrline_almost_done;
                         break;
                     case LF:
-#ifdef ALLOW_LF_ONLY
-                        goto hdrline_almost_done;
-#else
+                        if (p->allow_lf_only) {
+                            goto hdrline_almost_done;
+                        }
+
                         p->error = htparse_error_inval_hdr;
                         return i + 1;
-#endif
-                        break;
                     default:
                         goto hdrline_start;
                 }
@@ -1488,11 +1494,15 @@ hdrline_start:
                 err = 0;
                 res = 0;
 
+                if (ch == LF && p->allow_lf_only) {
+                    /* strict is on and the line MUST be CR LF, not LF */
+                    p->error = htparse_error_inval_hdr;
+                    return i + 1;
+                }
+
                 switch (ch) {
                     case CR:
-#ifdef ALLOW_LF_ONLY
                     case LF:
-#endif
                         switch (p->heval) {
                             case eval_hdr_val_none:
                                 break;
@@ -1543,19 +1553,12 @@ hdrline_start:
                                 break;
                         } /* switch */
 
-                        p->state             = s_hdrline_hdr_almost_done;
-#ifdef ALLOW_LF_ONLY
+                        p->state = s_hdrline_hdr_almost_done;
+
                         if (ch == LF) {
                             goto s_hdrline_hdr_almost_done;
                         }
-#endif
                         break;
-#ifndef ALLOW_LF_ONLY
-                    case LF:
-                        /* LF before CR? invalid */
-                        p->error             = htparse_error_inval_hdr;
-                        return i + 1;
-#endif
                     default:
                         p->buf[p->buf_idx++] = ch;
                         p->buf[p->buf_idx]   = '\0';
@@ -1568,9 +1571,7 @@ hdrline_start:
                 }
 
                 break;
-#ifdef ALLOW_LF_ONLY
 s_hdrline_hdr_almost_done:
-#endif
             case s_hdrline_hdr_almost_done:
                 htparse_log_debug("[%p] s_hdrline_hdr_almost_done", p);
 
@@ -1618,19 +1619,19 @@ s_hdrline_hdr_almost_done:
 
                         break;
                     case LF:
-#ifdef ALLOW_LF_ONLY
-                        res = hook_on_hdrs_complete_run(p, hooks);
-                        if (res) {
-                            p->error = htparse_error_user;
-                            return i + 1;
-                        }
-                        goto hdrline_almost_done;
-#else
-                        p->error = htparse_error_inval_hdr;
+                        if (p->allow_lf_only) {
+                            res = hook_on_hdrs_complete_run(p, hooks);
 
+                            if (res) {
+                                p->error = htparse_error_user;
+                                return i + 1;
+                            }
+
+                            goto hdrline_almost_done;
+                        }
+
+                        p->error = htparse_error_inval_hdr;
                         return i + 1;
-#endif
-                        break;
                     case '\t':
                         /* this is a multiline header value, we must go back to
                          * reading as a header value */
@@ -1652,9 +1653,7 @@ s_hdrline_hdr_almost_done:
                         break;
                 } /* switch */
                 break;
-#ifdef ALLOW_LF_ONLY
 hdrline_almost_done:
-#endif
             case s_hdrline_almost_done:
                 htparse_log_debug("[%p] s_hdrline_almost_done", p);
 

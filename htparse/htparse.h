@@ -106,6 +106,7 @@ const char   * htparser_get_strerror(htparser *);
 void         * htparser_get_userdata(htparser *);
 void           htparser_set_userdata(htparser *, void *);
 void           htparser_init(htparser *, htp_type);
+void           htparser_allow_lf_only(htparser * p);
 htparser     * htparser_new(void);
 
 #endif
