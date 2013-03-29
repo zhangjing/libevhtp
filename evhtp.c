@@ -3410,7 +3410,7 @@ evhtp_ssl_verify_crl(int ok, evhtp_x509_store_ctx_t * ctx, evhtp_t * htp) {
     memset((void *)&x509_obj, 0, sizeof(x509_obj));
 
     X509_STORE_CTX_init(&store_ctx, htp->ssl_crl, NULL, NULL);
-    res = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, subject, &x509_obj);
+    res = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, issuer, &x509_obj);
     crl = x509_obj.data.crl;
 
     if ((res > 0) && crl != NULL) {
