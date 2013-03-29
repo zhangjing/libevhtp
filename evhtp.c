@@ -3205,7 +3205,6 @@ evhtp_ssl_init(evhtp_t * htp, evhtp_ssl_cfg_t * cfg) {
 
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L
     SSL_CTX_set_options(htp->ssl_ctx, SSL_MODE_RELEASE_BUFFERS);
-    /* SSL_CTX_set_options(htp->ssl_ctx, SSL_MODE_AUTO_RETRY); */
     SSL_CTX_set_timeout(htp->ssl_ctx, cfg->ssl_ctx_timeout);
 #endif
 
@@ -3306,6 +3305,140 @@ evhtp_ssl_init(evhtp_t * htp, evhtp_ssl_cfg_t * cfg) {
 
     return 0;
 }     /* evhtp_use_ssl */
+
+int
+evhtp_ssl_load_crl(evhtp_t * htp) {
+    X509_LOOKUP * lookup;
+
+    if (htp->ssl_cfg == NULL) {
+        return 0;
+    }
+
+    if (htp->ssl_cfg->crl_file == NULL && htp->ssl_cfg->crl_dir == NULL) {
+        return 0;
+    }
+
+    if (htp->ssl_crl != NULL) {
+        X509_STORE_free(htp->ssl_crl);
+    }
+
+    if ((htp->ssl_crl = X509_STORE_new()) == NULL) {
+        return -1;
+    }
+
+    if (htp->ssl_cfg->crl_dir != NULL) {
+        if (!(lookup = X509_STORE_add_lookup(htp->ssl_crl, X509_LOOKUP_hash_dir()))) {
+            X509_STORE_free(htp->ssl_crl);
+            htp->ssl_crl = NULL;
+
+            return -1;
+        }
+
+        X509_LOOKUP_add_dir(lookup, htp->ssl_cfg->crl_dir, X509_FILETYPE_PEM);
+    }
+
+    if (htp->ssl_cfg->crl_file != NULL) {
+        if (!(lookup = X509_STORE_add_lookup(htp->ssl_crl, X509_LOOKUP_file()))) {
+            X509_STORE_free(htp->ssl_crl);
+            htp->ssl_crl = NULL;
+            return -1;
+        }
+
+        X509_LOOKUP_load_file(lookup, htp->ssl_cfg->crl_file, X509_FILETYPE_PEM);
+    }
+
+    return 0;
+} /* evhtp_ssl_load_crl */
+
+int
+evhtp_ssl_verify_crl(int ok, evhtp_x509_store_ctx_t * ctx, evhtp_t * htp) {
+    X509         * cert;
+    X509_NAME    * subject;
+    X509_NAME    * issuer;
+    X509_CRL     * crl;
+    X509_STORE_CTX store_ctx;
+    EVP_PKEY     * public_key;
+    X509_OBJECT    x509_obj = { 0 };
+    int            res;
+    int            timestamp_res;
+
+
+    cert    = X509_STORE_CTX_get_current_cert(ctx);
+    subject = X509_get_subject_name(cert);
+    issuer  = X509_get_issuer_name(cert);
+
+    /* lookup the CRL using the subject of the cert */
+
+    X509_STORE_CTX_init(&store_ctx, htp->ssl_crl, NULL, NULL);
+    res     = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, subject, &x509_obj);
+    crl     = x509_obj.data.crl;
+
+    if ((res > 0) && crl != NULL) {
+        public_key = X509_get_pubkey(cert);
+
+        res        = X509_CRL_verify(crl, public_key);
+
+        if (public_key != NULL) {
+            EVP_PKEY_free(public_key);
+        }
+
+        if (res <= 0) {
+            X509_OBJECT_free_contents(&x509_obj);
+
+            return 0;
+        }
+
+        timestamp_res = X509_cmp_current_time(X509_CRL_get_nextUpdate(crl));
+
+        if (timestamp_res == 0) {
+            /* invalid nextupdate found */
+            X509_OBJECT_free_contents(&x509_obj);
+
+            return 0;
+        }
+
+        if (timestamp_res < 0) {
+            /* CRL is expired */
+            X509_OBJECT_free_contents(&x509_obj);
+
+            return 0;
+        }
+
+        X509_OBJECT_free_contents(&x509_obj);
+    }
+
+    memset((void *)&x509_obj, 0, sizeof(x509_obj));
+
+    X509_STORE_CTX_init(&store_ctx, htp->ssl_crl, NULL, NULL);
+    res = X509_STORE_get_by_subject(&store_ctx, X509_LU_CRL, subject, &x509_obj);
+    crl = x509_obj.data.crl;
+
+    if ((res > 0) && crl != NULL) {
+        int num_revoked;
+        int i;
+
+
+        num_revoked = sk_X509_REVOKED_num(X509_CRL_get_REVOKED(crl));
+
+        for (i = 0; i < num_revoked; i++) {
+            X509_REVOKED * revoked;
+            ASN1_INTEGER * asn1_serial;
+
+            revoked     = sk_X509_REVOKED_value(X509_CRL_get_REVOKED(crl), i);
+            asn1_serial = revoked->serialNumber;
+
+            if (!ASN1_INTEGER_cmp(asn1_serial, X509_get_serialNumber(cert))) {
+                X509_OBJECT_free_contents(&x509_obj);
+
+                return 0;
+            }
+        }
+
+        X509_OBJECT_free_contents(&x509_obj);
+    }
+
+    return ok;
+} /* evhtp_ssl_verify_crl */
 
 #endif
 

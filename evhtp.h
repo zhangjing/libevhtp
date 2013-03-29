@@ -33,6 +33,7 @@ typedef SSL_SESSION               evhtp_ssl_sess_t;
 typedef SSL                       evhtp_ssl_t;
 typedef SSL_CTX                   evhtp_ssl_ctx_t;
 typedef X509                      evhtp_x509_t;
+typedef X509_STORE                evhtp_x509_store_t;
 typedef X509_STORE_CTX            evhtp_x509_store_ctx_t;
 #else
 typedef void                      evhtp_ssl_sess_t;
@@ -256,27 +257,28 @@ struct evhtp_alias_s {
  * @brief main structure containing all configuration information
  */
 struct evhtp_s {
-    evhtp_t  * parent;           /**< only when this is a vhost */
-    evbase_t * evbase;           /**< the initialized event_base */
-    evserv_t * server;           /**< the libevent listener struct */
-    char     * server_name;      /**< the name included in Host: responses */
-    void     * arg;              /**< user-defined evhtp_t specific arguments */
-    int        bev_flags;        /**< bufferevent flags to use on bufferevent_*_socket_new() */
+    evhtp_t  * parent;                /**< only when this is a vhost */
+    evbase_t * evbase;                /**< the initialized event_base */
+    evserv_t * server;                /**< the libevent listener struct */
+    char     * server_name;           /**< the name included in Host: responses */
+    void     * arg;                   /**< user-defined evhtp_t specific arguments */
+    int        bev_flags;             /**< bufferevent flags to use on bufferevent_*_socket_new() */
     uint64_t   max_body_size;
     uint64_t   max_keepalive_requests;
-    int        disable_100_cont; /**< if set, evhtp will not respond to Expect: 100-continue */
+    int        disable_100_cont;      /**< if set, evhtp will not respond to Expect: 100-continue */
 
 #ifndef DISABLE_SSL
-    evhtp_ssl_ctx_t * ssl_ctx;   /**< if ssl enabled, this is the servers CTX */
-    evhtp_ssl_cfg_t * ssl_cfg;
+    evhtp_ssl_ctx_t    * ssl_ctx;     /**< if ssl enabled, this is the servers CTX */
+    evhtp_ssl_cfg_t    * ssl_cfg;
+    evhtp_x509_store_t * ssl_crl;
 #endif
 
 #ifndef EVHTP_DISABLE_EVTHR
-    evthr_pool_t * thr_pool;     /**< connection threadpool */
+    evthr_pool_t * thr_pool;          /**< connection threadpool */
 #endif
 
 #ifndef EVHTP_DISABLE_EVTHR
-    pthread_mutex_t    * lock;   /**< parent lock for add/del cbs in threads */
+    pthread_mutex_t    * lock;        /**< parent lock for add/del cbs in threads */
     evhtp_thread_init_cb thread_init_cb;
     void               * thread_init_cbarg;
 #endif
@@ -494,6 +496,8 @@ struct evhtp_ssl_cfg_s {
     evhtp_ssl_scache_get    scache_get;
     evhtp_ssl_scache_del    scache_del;
     void                  * args;
+    char                  * crl_file;
+    char                  * crl_dir;
 };
 
 /**
