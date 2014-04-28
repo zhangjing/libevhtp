@@ -440,6 +440,7 @@ struct evhtp_connection_s {
     evhtp_type                   type;          /**< server or client */
     char                         paused;
     char                         free_connection;
+    char                         connected;     /**< upstream connection status, for client */
     struct ev_token_bucket_cfg * ratelimit_cfg; /**< connection-specific ratelimiting configuration. */
 
     TAILQ_HEAD(, evhtp_request_s) pending;      /**< client pending data */

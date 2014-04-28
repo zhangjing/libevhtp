@@ -1582,6 +1582,7 @@ _evhtp_connection_eventcb(evbev_t * bev, short events, void * arg) {
 
     if ((events & BEV_EVENT_CONNECTED)) {
         if (c->type == evhtp_type_client) {
+            c->connected = 1;
             bufferevent_setcb(bev,
                               _evhtp_connection_readcb,
                               _evhtp_connection_writecb,
@@ -1741,6 +1742,7 @@ _evhtp_connection_new(evhtp_t * htp, evutil_socket_t sock, evhtp_type type) {
     connection->error  = 0;
     connection->owner  = 1;
     connection->paused = 0;
+    connection->connected = 0;
     connection->sock   = sock;
     connection->htp    = htp;
     connection->type   = type;
